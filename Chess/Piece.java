@@ -16,7 +16,7 @@ public abstract class Piece {
     public char getImg(){  return img; }
     public abstract LinkedList<Pos> getPossibleDestinations(Piece[][] board);
     public boolean move(Pos pos, Piece[][] board){
-        if(!getPossibleDestinations(board).contains(pos)){  return false; }
+        if(!contains(getPossibleDestinations(board), pos)){ return false; }
         Chess.board[this.pos.getRow()][this.pos.getCol()] = null;
         this.pos = pos;
         if(Chess.board[pos.getRow()][pos.getCol()] != null){
@@ -40,5 +40,10 @@ public abstract class Piece {
     }
     public static boolean isInRange(Pos pos, Piece[][] board){
         return pos.getCol() >= 0 && pos.getCol() < board.length && pos.getRow() >= 0 && pos.getRow() < board.length;
+    }
+    private static boolean contains(LinkedList<Pos> ll, Pos val){
+        for(Pos pos : ll){
+            if(pos.getRow() == val.getRow() && pos.getCol() == val.getCol()){   return true; }
+        } return false;
     }
 }
