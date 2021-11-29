@@ -34,10 +34,15 @@ public class Chess extends JFrame {
             }
             piecesList.addAll(Arrays.asList(board[row]));
         }
+        display();
+    }
+
+    private void display() {
         JFrame window = new JFrame("Chess");
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setLayout(new BorderLayout());
         jLabel = new JLabel(boardToStr());
+        jLabel.setFont(new Font("Serif", Font.PLAIN, 30));
         window.add(jLabel, BorderLayout.CENTER);
         window.pack();
         window.setVisible(true);
@@ -51,7 +56,7 @@ public class Chess extends JFrame {
             for (Piece piece : pieces) {
                 sb.append(piece == null ? "\u2007\u2007" : piece.getImg()).append('|');
             }
-            sb.append("<br>-------------------------------<br>|");
+            sb.append("<br>-----------------------------<br>|");
         }
         sb.deleteCharAt(sb.length()-1);
         sb.append("</html>");
