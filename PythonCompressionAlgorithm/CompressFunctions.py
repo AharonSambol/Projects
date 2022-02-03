@@ -6,7 +6,8 @@ from Decompress import OPEN_BRACKETS, CLOSE_BRACKETS
 from Decompress import get_judge_by, starts_with_indent_keyword
 from DeCompressFunctions import remove_strings_given_positions, find_string_positions
 from DeCompressFunctions import count_brackets, count_brackets_single, to_correct_case
-
+from DeCompressFunctions import BUILT_IN_FUNCTIONS, ALPHABET
+from ReplaceSymbols import *
 
 start_of_re = r'(?:^|(?<!\d))'  # not a number
 end_of_re = r'(?:\d(?:$|(?!\d)))?'  # maybe a number
@@ -14,27 +15,60 @@ digits_and_commas_re = re.compile('(' + start_of_re + r'(?:\d,)+' + end_of_re + 
 
 
 # todo also replace imports not at head of file
-def replace_imports(input_file):
-    import_re = re.compile(r'(from [^\s]+ ?)?import ((, )?[^\s,]+( as [^\s]+)?)+')
-    i = -1
-    for i, line in enumerate(input_file + ['']):
+def replace_imports(input_file, start=0):
+    import_re = re.compile(r'(from\b ?[^\s]+\b ?)?import\b ?((, ?)?[^\s,]+( as [^\s]+)?)+')
+    i = start - 1
+    for i, line in enumerate(input_file[start:] + ['']):
+        amount_of_close, line = count_close_brackets(line)
+
+        line = to_correct_case(line)
         if not import_re.match(line):
             break
-        line = re.split(r'[\s,]+', line.strip())
+        # line = list(import_re.match(line).groups())
+        ends_with_comment = line.endswith(COMMENT)
+        if ends_with_comment:
+            line = line[:-COMMENT_LEN].strip()
+
+        line = [x for x in re.split(r'[\s,]+', ' '.join(re.split(r'\b', line.strip()))) if x.strip() != '']
+
+        # not_seperator = lambda x: x.strip(' ,') not in ['', 'import']
+        # line = [x.replace(',', '') for x in re.split(r'\b', line.strip()) if not_seperator(x)]
         new_line = ''
         if line[0] == 'from':
             line.pop(0)
-            new_line += line.pop(0) + '>'
+            new_line += line.pop(0) + FROM
+        while line[0] != 'import':
+            new_line = new_line[:-1] + line.pop(0) + FROM
         line.pop(0)
         new_line += line.pop(0)
         for nxt in line:
             if nxt == 'as':
-                new_line += '='
+                new_line += AS
             else:
-                new_line += ('' if new_line[-1] in ['=', '('] else ' ') + nxt
-        input_file[i] = new_line.strip()
-    input_file.insert(i, '%')
-    return i
+                new_line += ('' if new_line[-1] in ['=', '(', '.'] or nxt == '.' else ' ') + nxt
+        input_file[start + i] = CLOSE_INDENT * amount_of_close + new_line.strip()
+        input_file[start + i] += COMMENT if ends_with_comment else ''
+
+    if start + i < len(input_file) and not input_file[start + i].startswith(STR):
+        input_file.insert(start + i, END_IMPORTS)
+    return start + i
+
+
+def shorten_for_common_usses(line):
+    if re.search(r'for \w+ in range\(', line):
+        line = re.sub(r'\bfor _ in range\(', FOR_IN_RANGE, line)
+        line = re.sub(r'\bfor (\w+) in range\(', FOR_IN_RANGE_NAME + r'\1(', line)
+    if re.search(r'\b(\w+) for \1 in', line):
+        line = re.sub(r'\b(\w+) for \1 in', COMPREHENSION_RANGE + r'\1', line)
+    return line
+
+
+def count_close_brackets(line):
+    amount_of_close = 0
+    while len(line) > 0 and line[0] == CLOSE_INDENT:
+        line = line[1:]
+        amount_of_close += 1
+    return amount_of_close, line
 
 
 def remove_strings(file):
@@ -70,7 +104,7 @@ def group_nums(line):
         return line
     end = ',' if line[-1] == ',' else ''
     line = line.replace(',', '')
-    return ',,' + line + end
+    return GROUPED_NUMS + line + end
 
 
 def numbers_with_commas(line):
@@ -81,19 +115,19 @@ def replace_common_words(line):
     if 'self' in line:
         line = remove_self(line)
     if ' or ' in line:
-        line = line.replace(' or ', '||')
+        line = line.replace(' or ', OR)
     if ' and ' in line:
-        line = line.replace(' and ', '&&')
+        line = line.replace(' and ', AND)
     if ' not ' in line:
-        line = line.replace(' not ', '%%')
+        line = line.replace(' not ', NOT)
     if ' is ' in line:
-        line = line.replace(' is ', '@@')
+        line = line.replace(' is ', IS)
     if ' __init__ ' in line:
-        line = line.replace(' __init__ ', '``')
-    # if ' True ' in line:
-    #     line = line.replace(' True ', ';;')
-    # if ' False ' in line:
-    #     line = line.replace(' False ', '##')
+        line = line.replace(' __init__ ', INIT)
+    if ' True ' in line:
+        line = line.replace(' True ', TRUE)
+    if ' False ' in line:
+        line = line.replace(' False ', FALSE)
     return line
 
 
@@ -113,7 +147,7 @@ def to_camel_case(file):
                 amount_dashes = len(re.split(r'_([a-zA-Z])', word)) - 1
                 if amount_dashes > 2 or amount_dashes + surrounding > 2:
                     surrounding = str(surrounding) if surrounding != 0 else ''
-                    words[i] = '`' + surrounding + re.sub(r'_([a-zA-Z])', upper, word) + '`'
+                    words[i] = CAMEL_CASE + surrounding + re.sub(r'_([a-zA-Z])', upper, word) + CAMEL_CASE
                     changed = True
         if changed:
             file[l] = ''.join(words)
@@ -142,7 +176,7 @@ def init(file, line, i):
     i += 1
     while True:
         for param in params:
-            if file[i] == f'self.{param}={param}':
+            if i < len(file) and file[i] == f'self.{param}={param}':
                 file.pop(i)
                 assigned_param.append(param)
                 break
@@ -151,7 +185,7 @@ def init(file, line, i):
     res = ''
     for p, param in enumerate(params):
         if param in assigned_param:
-            res += '+'
+            res += INITED  # TODO probably don't need a , before an INITED
         res += param + (',' if p + 1 != len(params) else '')
     line = line.replace(','.join(params), res)
     return line
@@ -177,7 +211,7 @@ def get_function(file, orig_line_num):
 
 def count_close(line):
     res = 0
-    while line[res] == '}':
+    while line[res] == CLOSE_INDENT:
         res += 1
     return res
 
@@ -187,7 +221,7 @@ def is_valid_self(line, start, end):
         return False
     if end + 1 >= len(line) or re.match(r'\w', line[end + 1]):
         return False
-    if line.startswith('def ') and line[end + 1] == ',':
+    if line.startswith(DEF) and line[end + 1] == ',':
         return True
     if line[end + 1] == '.':
         return True
@@ -225,13 +259,13 @@ def remove_self(line):
 
 def compress_while(line):
     if line == 'while True':
-        return '!@'
-    return '!@' + line[len('while'):].strip()
+        return WHILE
+    return WHILE + line[len('while'):].strip()
 
 
 # todo add more
 def compress_if(line):
-    return '?' + line[len('if'):].strip()
+    return IF + line[len('if'):].strip()
 
 
 def split_for(line):
@@ -240,15 +274,13 @@ def split_for(line):
     names = ''
     for c, char in enumerate(line):
         open_brackets += count_brackets_single(char)
-        if open_brackets == 0 and re.match(r'.\bin\b.', line[c-1:c+3]):
+        if open_brackets == 0 and re.match(r'.\bin\b.', line[c - 1:c + 3]):
             names = line[:c]
             break
     return [names.strip(), line[len(names) + 2:].strip()]
 
 
-
 def compress_for(file, line, line_num):
-
     # try:
     #     parts = re.match(r'for\b(.+?)\bin\b\s*(.+)', line).groups()
     # except Exception:
@@ -265,7 +297,7 @@ def compress_for(file, line, line_num):
         last_was_num = is_num(vr)
         vars += vr
     iters = default_for_functions(parts[1])
-    line = 'f!' + vars + '>' + iters
+    line = FOR + vars + IN + iters
     return line
 
 
@@ -288,15 +320,15 @@ def default_for_functions(parts):
     return parts
 
 
-def abreviate_line(line):
+def abbreviate_line(line):
     line_ln, end, new_line = len(line), -1, []
     for i, char in enumerate(line):
         if i < end:
             continue
-        if len(char) > 1 and i + 2 < line_ln and line[i+1] == ' ' and len(line[i + 2]) > 1:
+        if len(char) > 1 and i + 2 < line_ln and line[i + 1] == ' ' and len(line[i + 2]) > 1:
             end = i + 2
-            res = ABBREVIATIONS[char] + "@"
-            while end < line_ln and line[end-1] == ' ' and len(line[end]) > 1:
+            res = ABBREVIATIONS[char] + ABBREVIATION
+            while end < line_ln and line[end - 1] == ' ' and len(line[end]) > 1:
                 res += ABBREVIATIONS[line[end]]
                 end += 2
             new_line.append(res)
@@ -308,7 +340,7 @@ def abreviate_line(line):
 
 def shorten_num(num, changed):
     res, cnt = '', 0
-    if len(num) > 0 and num[0] =='0':
+    if len(num) > 0 and num[0] == '0':
         return num, False
     for dig in num:
         if dig == '_':
@@ -327,7 +359,23 @@ def shorten_num(num, changed):
         res += chr(64 + cnt)
     if len(res) >= len(num):
         res = num
+    # base = BASE_62 + to_base_62(num)
+    # if len(base) < len(res):
+    #     res = base
     return res, changed or res != num
+
+
+def to_base_62(num):
+    num = int(num)
+    base = len(ALPHABET)
+    first = str(num % 10)
+    res = ''
+    num = num // 10
+    while num:
+        res += ALPHABET[num % base]
+        num //= base
+    res = first + res[::-1]
+    return res or "0"
 
 
 def replace_numbers(line):
@@ -339,6 +387,7 @@ def replace_numbers(line):
                 if i in val:
                     continue
             parts[v], changed = shorten_num(val, changed)
+    # return '1'
     return ''.join(parts) if changed else line
 
 
@@ -371,9 +420,9 @@ def throw_except(line):
     if exception is None:
         return line
     start = 't' if is_raise else 'e'
-    line = start + '!' + compress_exception(exception)
+    line = '!' + start + compress_exception(exception)
     if parts[2] != '':
-        line += ('<' if is_raise else '=') + compress_exception(parts[2])
+        line += (FROM if is_raise else AS) + compress_exception(parts[2])
     return line
 
 
@@ -385,6 +434,16 @@ def compress_exception(exception):  # maybe can pass Exception an object?
     # else:
     exception = exception
     return exception
+
+
+def replace_common_functions(line):
+    # for i in BUILT_IN_FUNCTIONS:
+    #     if functions.count(i) > 1:
+    #         print(i)
+    for i, func in enumerate(BUILT_IN_FUNCTIONS):
+        if func in line:
+            line = re.sub(r'\b' + func + r'\(', f'{ to_base_62(i) }(', line)
+    return line
 
 
 def remove_spaces_line(line):
@@ -411,23 +470,35 @@ def remove_spaces_all(file, index):
 
 def put_brackets(input_file, comments):
     indentation = comment_count = 0
-    ends_with_colon = re.compile(r':\s*(!comment!)?$')
+    ends_with_colon = re.compile(r':\s*(' + COMMENT + ')?$')
+    # is_function_call = re.compile(r'\w+\((.*)\)')
     for i, line in enumerate(input_file):
         tabs = count_tabs(line)
         line = line.strip()
         judge_by = get_judge_by(line, comments, comment_count)
-        comment_count += 1 if '!comment!' in line else 0
+        comment_count += 1 if COMMENT in line else 0
 
         amount_to_indent = indentation - tabs
         indentation = tabs
+
+        # 3 issue is multilined function calls since eg:
+        # func(1, # one
+        #      02, # two
+        #      )
+        # function_args = is_function_call.fullmatch(line.strip())
+        # if indentation == 0 and function_args is not None:
+        #     function_args = function_args.group(1)
+        #     if count_brackets(function_args) == 0:
+        #         print(function_args)
+
         if starts_with_indent_keyword(judge_by) in ['elif', 'else', 'except', 'finally']:
             amount_to_indent -= 1
             if amount_to_indent == -1:
-                line = ':' + line
+                line = DONT_UNINDENT + line
         if ends_with_colon.search(judge_by):
             line = ends_with_colon.sub(r'\1', line)
             indentation += 1
-        input_file[i] = '}' * amount_to_indent + line
+        input_file[i] = CLOSE_INDENT * amount_to_indent + line
 
 
 def multiline_comments(file):
@@ -438,13 +509,13 @@ def multiline_comments(file):
             continue
         if line[0] == '#' and i + 1 < file_ln and file[i + 1][0] == '#':
             end = i
-            file[i] = '$' + line[1:]
+            file[i] = MULTILINE_COMMENT + line[1:]
             while end + 1 < file_ln and file[end + 1][0] == '#':
                 end += 1
                 file[end] = file[end][1:]
-                if len(file[end]) > 0 and file[end][0] == '$':
+                if len(file[end]) > 0 and file[end][0] == MULTILINE_COMMENT:
                     file[end] = ' ' + file[end]
-            file[end] = '$' + file[end]
+            file[end] = MULTILINE_COMMENT + file[end]
 
 
 def remove_comments(file, strings):
@@ -456,7 +527,7 @@ def remove_comments(file, strings):
         amount_of_open += count_brackets(valid_line)
 
         if removing:
-            if '!str!' in line:
+            if STR in line:
                 line = restore_specific_str(file, line, l, strings)
             if amount_of_open == 0:
                 line_actual_lines = line.split('\n')
@@ -464,10 +535,10 @@ def remove_comments(file, strings):
                     if comments[-1] != '':
                         comments[-1] += '\n'
                         if i == len(line_actual_lines) - 1:
-                            comments[-1] += '$'
+                            comments[-1] += MULTILINE_COMMENT
                     comments[-1] += ln.strip()
                 to_pop.append(l)
-                comments[-1] = '!$' + comments[-1]
+                comments[-1] = DONT_KNOW + comments[-1]
                 # file[l+1] = '$' + file[l+1]
                 removing = False
             else:
@@ -477,22 +548,22 @@ def remove_comments(file, strings):
         else:
             if amount_of_open != 0:
                 removing = True
-                if '!str!' in line:
+                if STR in line:
                     restored_line = restore_specific_str(file, line, l, strings)
                     comments.append(restored_line.strip())
                 else:
                     comments.append(line.strip())
-                file[l] = count_tabs(file[l]) * '\t' + '!comment!'
+                file[l] = count_tabs(file[l]) * '\t' + COMMENT
                 # remove previous lines until one with open bracket
                 open_, i = amount_of_open, l
                 while True:
-                    valid_line = get_before_comment(line)   # todo dont count brackets in string
+                    valid_line = get_before_comment(line)  # todo dont count brackets in string
                     open_ -= count_brackets(valid_line)
                     if i != l:
                         if i < 0:
                             raise Exception("ohoh")
                         to_pop.append(i)
-                        if '!str!' in line:
+                        if STR in line:
                             line = restore_specific_str(file, line, i, strings)
                         comments[-1] = line.strip() + '\n' + comments[-1]
                     line, i = file[i - 1], i - 1
@@ -501,7 +572,7 @@ def remove_comments(file, strings):
             elif '#' in line:
                 pos = line.index('#')
                 comments.append('#' + line[pos + 1:].strip())
-                file[l] = line[:pos] + '!comment!'
+                file[l] = line[:pos] + COMMENT
     for i in to_pop[::-1]:
         file.pop(i)
     return comments

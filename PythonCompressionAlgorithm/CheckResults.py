@@ -1,5 +1,5 @@
 import re
-from black import black_format_str, FileMode
+from black import format_str as black_format_str, FileMode
 from Decompress import get_before_comment
 
 
@@ -60,14 +60,18 @@ def check_if_same(decompressed, ipt_cpy):
     same = True
     for file in [ipt_cpy, decompressed]:
         i = 0
+        in_str = False
         while i < len(file):
             line = file[i]
-            file[i] = get_before_comment(line).replace(',)', ')')
-            if file[i].strip() == "":
+            line, in_str = get_before_comment(line, in_str, 2)
+            line = line.replace(',)', ')')
+            if line.strip() == "":
                 file.pop(i)
             else:
-                while file[i].strip()[-1] == ',' and file[i+1].strip()[0] in ")]}":
-                    file[i] = file[i][:-1]
+                if i + 1 < len(file) and file[i+1].strip()[0] in ")]}":
+                    while line[-1] in [',', ' ', '\t']:
+                        line = line[:-1]
+                file[i] = line
                 i += 1
         # print('\n'.join(file))
         # print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
@@ -91,8 +95,8 @@ def check_if_same(decompressed, ipt_cpy):
 
     for line1, line2 in zip(ipt_cpy, decompressed):
         if line1.strip() != line2.strip() and not is_okay_mistake(line1, line2):
-            print(line1)
-            print(line2)
+            print(f'original:   {line1}')
+            print(f'mistake:    {line2}')
             print('----------------------')
             return False
     if not same:
@@ -137,4 +141,7 @@ def is_okay_mistake(line1, line2):
     if st1[0] == st2[0] == '#':
         if st1[1:].strip() == st2[1:].strip():
             return True
+    return_none = ['return None', 'return']
+    if st1 in return_none and st2 in return_none:
+        return True
     return False
