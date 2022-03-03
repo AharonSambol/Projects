@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using LLEnumer = System.Collections.Generic.LinkedList<ReCharTypes>.Enumerator;
-
+using StrStrDict = System.Collections.Generic.Dictionary<string, string>;
 
 
 public record Char(char ch, bool isEscaped);
@@ -16,7 +16,7 @@ public class RegxExmplGenerator {
         {'=', TypeOfGroup.LookAhead},
         {'!', TypeOfGroup.NegativeLookAhead},
     };
-    static void Main(string[] args){
+    static void Main(string[] args){      
         // Console.WriteLine("input regex: ");
         // var pat = Console.ReadLine();
         var pat = "";
@@ -50,13 +50,27 @@ public class RegxExmplGenerator {
     private static LinkedList<string> ConstructExamples(string pat){
         pat = Pattern.PATTERN;
         var parsedEscapes = EscapeChars(pat);
-        var parsedRegex = ParseExample(parsedEscapes);
+        var parsedRegex = ParseRegex(parsedEscapes);
         parsedRegex = ParseGroups(parsedRegex);
         var examples = new LinkedList<Match>();
+
+        System.Diagnostics.Stopwatch stopwatch = new();
+        stopwatch.Start();
+
         GenerateExmples(parsedRegex.ToArray(), 0, "", examples, new());
         
-        HashSet<string> hs = new HashSet<string>(examples.Select(x => x.str));
-        return new LinkedList<string>(hs);
+        stopwatch.Stop();
+        Console.WriteLine(stopwatch.ElapsedMilliseconds);
+
+        #region just checking...
+            //todo probably not useful...
+            HashSet<string> hs = new HashSet<string>(examples.Select(x => x.str));
+            if(hs.Count != examples.Count){
+                Console.WriteLine($"Useful");
+            }
+        #endregion
+        
+        return new LinkedList<string>(examples.Select(x => x.str));
     }
 
     const string LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -91,13 +105,12 @@ public class RegxExmplGenerator {
                 continue;
             }
             res.AddLast(new Char(c, isEscaped));
-            if(isEscaped){  isEscaped = false; }
+            isEscaped = false;
         }
         return res;
     }
-    static LinkedList<ReCharTypes> ParseExample(LinkedList<Char> pattern){
+    static LinkedList<ReCharTypes> ParseRegex(LinkedList<Char> pattern){
         var parsed = new LinkedList<ReCharTypes>();
-        bool isInNamedBackrefrence = false;
         Func<Char, bool> IsDotAll = chr => chr is Char {isEscaped: false, ch: '.'} && !IsInSquareGroup(parsed);
         var pointer = pattern.First;
         while(pointer != null){
@@ -112,10 +125,9 @@ public class RegxExmplGenerator {
                 if("dwsDWS".Contains(chr.ch)){
                     AddAllChars(parsed, AllCharsInEscapeSeq(chr.ch));
                 } else if(NUMBERS.Contains(chr.ch)){
-                    parsed.AddLast(new BackRefrence(NUMBERS.IndexOf(chr.ch)).EndEdit()); //? NOTE: not actually necceserily end edit
+                    parsed.AddLast(new BackReference(NUMBERS.IndexOf(chr.ch)));
                 } else if(chr.ch == 'k'){
-                    parsed.AddLast(new BackRefrence(chr.ch));
-                    isInNamedBackrefrence = true;
+                    parsed.AddLast(new BackReference());
                 } else {
                     AddChar(parsed, chr);
                 }
@@ -126,12 +138,10 @@ public class RegxExmplGenerator {
                 else                {  AddChar(parsed, chr); }
             } 
 
-            else if(isInNamedBackrefrence){
-                var refGroup = (BackRefrence) parsed.Last.Value;
+            else if(parsed.Last?.Value is BackReference{isNamed: true, IsOpen: true} refGroup){
                 if(chr.ch == '<'){}
                 else if(chr.ch == '>'){ 
-                    isInNamedBackrefrence = false;
-                    refGroup.EndEdit(); 
+                    refGroup.SetOpen(false).EndEdit(); 
                 }
                 else { refGroup.AddLetter(chr.ch); }
             } 
@@ -173,9 +183,9 @@ public class RegxExmplGenerator {
                         } else {    AddChar(parsed, chr); }
                         break;
                     case '0' or '1' or '2' or '3' or '4' or '5' or '6' or '7' or '8' or '9':
-                        if(parsed.Last.Value is BackRefrence group){
-                            group.AddDigit(NUMBERS.IndexOf(chr.ch)).EndEdit(); //? NOTE: not actually necceserily end edit
-                        } else {    AddChar(parsed, chr); } 
+                        if(parsed.Last.Value is BackReference group){
+                            group.AddDigit(NUMBERS.IndexOf(chr.ch));
+                        } else {    AddChar(parsed, chr); }
                         break;
                     default:
                         AddChar(parsed, chr);
@@ -205,7 +215,9 @@ public class RegxExmplGenerator {
             }
             throw new Exception("Unrecognizeg type of group");
         }
-        parsed.Last.Value.SetOptional(true);
+        if(!parsed.Last.Value.IsMany){ //? if its not char(+?) [lazy]
+            parsed.Last.Value.SetOptional(true);
+        }
         return pointer;
     }
 
@@ -266,42 +278,49 @@ public class RegxExmplGenerator {
 
     public static void GenerateExmples(
             ReCharTypes[] parsedRegex, int index, string example, 
-            LinkedList<Match> result, Dictionary<string, string> groups
+            LinkedList<Match> result, StrStrDict groups //!  , Lookahead? lookahead=null
     ){
         var matchedSoFar = new Match(example, groups);
-        if(index >= parsedRegex.Length){ 
+        if (index >= parsedRegex.Length){
             result.AddLast(matchedSoFar);
             return;
         }
         var thisChar = parsedRegex[index];
-        if(thisChar.IsOptional){
+        if (thisChar.IsOptional){
             GenerateExmples(parsedRegex, index + 1, example, result, groups);
         }
 
         CurlyBracketsGroup curlyGroup = null;
         CircleBracketsGroup circleGroup = null;
-        if(thisChar is CurlyBracketsGroup group1)       {   curlyGroup = group1;   } 
-        else if(thisChar is CircleBracketsGroup group2) {   circleGroup = group2;   }
+        if (thisChar is CurlyBracketsGroup group1) { curlyGroup = group1; }
+        else if (thisChar is CircleBracketsGroup group2) { circleGroup = group2; }
         bool isCurlyGroup = curlyGroup is not null;
         bool isCircleGgroup = circleGroup is not null;
+        
+        int varietyToTry = thisChar.MaxExampleOptions();
+        string[] matches = null;
+        Match[] matchesAndGroups = null;
+        bool alreadyCalculatedMatches = false;
+        if(varietyToTry != -1){
+            CalculateMatches(parsedRegex, index, matchedSoFar, thisChar, curlyGroup, circleGroup, isCurlyGroup, isCircleGgroup, ref matches, ref matchesAndGroups);
+            alreadyCalculatedMatches = true;
+        }
+        if (varietyToTry == -1 || varietyToTry > Pattern.VARIETY || thisChar.IsMany){  
+            varietyToTry = Pattern.VARIETY; 
+        }
 
-        int varietyToTry = (thisChar is SimpleChar && !thisChar.IsMany) ? 1 : Pattern.VARIETY; 
-        var differentPossibilities = new HashSet<Match>();
-        for (int variety=0; variety < varietyToTry; variety++) {
-            string[] matches = null;
-            Match[] matchesAndGroups = null;
-            if (isCurlyGroup) { 
-                matchesAndGroups = GetCurlyBracketsMatch(parsedRegex, index, curlyGroup, matchedSoFar);
-            } else if (isCircleGgroup){
-                matchesAndGroups = circleGroup.GetExampleMatchGroups(matchedSoFar);
-            } else {
-                matches = thisChar.GetExampleMatch(matchedSoFar);
+        var differentPossibilities = new LinkedList<Match>();
+        for (int variety = 0; variety < varietyToTry; variety++){
+            if(!alreadyCalculatedMatches){
+                //? the number of possible matches is unknownly big so instead it'll just  
+                //? generate a new batch of VARIETY examples each time it loops
+                CalculateMatches(parsedRegex, index, matchedSoFar, thisChar, curlyGroup, circleGroup, isCurlyGroup, isCircleGgroup, ref matches, ref matchesAndGroups);
             }
             int amountOfRepete = thisChar.IsMany ? rnd.Next(1, Pattern.VARIETY) : 1;
             Match newExample = new();
             newExample.groups = new();
-            for (int repete=0; repete < amountOfRepete; repete++) {
-                if(matches is null){
+            for (int repete = 0; repete < amountOfRepete; repete++){
+                if (matches is null){
                     var ex = matchesAndGroups[rnd.Next(matchesAndGroups.Length)];
                     newExample.str += ex.str;
                     JoinDicts(newExample.groups, ex.groups);
@@ -309,12 +328,11 @@ public class RegxExmplGenerator {
                     newExample.str += matches[rnd.Next(matches.Length)];
                 }
             }
-            differentPossibilities.Add(newExample);
+            AddIfNotIn(differentPossibilities, newExample);
         }
-        
-        foreach(var possibility in differentPossibilities) {
+        foreach (var possibility in differentPossibilities){
             var groupsCopy = groups;
-            if(thisChar is CircleBracketsGroup group){
+            if (thisChar is CircleBracketsGroup group){
                 groupsCopy = CopyDict(possibility.groups);
                 groupsCopy[group.GroupNumber ?? "-1"] = possibility.str;
                 groupsCopy[group.GroupName ?? "-1"] = possibility.str;
@@ -322,15 +340,50 @@ public class RegxExmplGenerator {
             GenerateExmples(parsedRegex, index + 1, example + possibility.str, result, groupsCopy);
         }
     }
-    private static void JoinDicts(Dictionary<string, string> dict1, Dictionary<string, string> dict2){
+
+
+    private static void CalculateMatches(
+            ReCharTypes[] parsedRegex, int index, Match matchedSoFar, ReCharTypes thisChar, 
+            CurlyBracketsGroup curlyGroup, CircleBracketsGroup circleGroup, bool isCurlyGroup, 
+            bool isCircleGgroup, ref string[] matches, ref Match[] matchesAndGroups
+    ){
+        if (isCurlyGroup){
+            matchesAndGroups = GetCurlyBracketsMatch(parsedRegex, index, curlyGroup, matchedSoFar);
+        } else if (isCircleGgroup){
+            matchesAndGroups = circleGroup.GetExampleMatchGroups(matchedSoFar);
+        } else {
+            matches = thisChar.GetExampleMatch(matchedSoFar);
+        }
+    }
+
+    private static void AddIfNotIn(LinkedList<Match> ll, Match match){
+        foreach (var item in ll){
+            if (match.str.Equals(item.str) && CompareDicts(item.groups, match.groups)){
+                return;
+            }
+        }
+        ll.AddLast(match);
+    }
+
+    private static bool CompareDicts(StrStrDict dict1, StrStrDict dict2){     
+        if(dict1.Count != dict2.Count){ return false; }
+        foreach(var set in dict1) {
+            if(!dict2.TryGetValue(set.Key, out string val) || val != set.Value){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void JoinDicts(StrStrDict dict1, StrStrDict dict2){
         foreach(var item in dict2) {
             if(!dict1.ContainsKey(item.Key)){
                 dict1[item.Key] = item.Value;
             }
         }
     }
-    private static Dictionary<string, string> CopyDict(Dictionary<string, string> dict){
-        var res = new Dictionary<string, string>();
+    private static StrStrDict CopyDict(StrStrDict dict){
+        var res = new StrStrDict();
         if(dict is null){   return res; }
         foreach(var set in dict) {  res[set.Key] = set.Value; }
         return res;
