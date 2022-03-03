@@ -8,6 +8,7 @@ public interface ReCharTypes {
     bool IsOpen {   get; }
     ReCharTypes SetOpen(bool val);
     ReCharTypes EndEdit();
+    int MaxExampleOptions();
 }
 
 public enum PlaceHolderType {
