@@ -28,15 +28,16 @@ public abstract class BasicImplGroup : ReCharTypes{
     public abstract string[] GetExampleMatch(Match matchedSoFar);
 
     public virtual ReCharTypes EndEdit() => this;
+    public virtual int MaxExampleOptions() => -1; 
 }
 
 public class SimpleChar : BasicImplGroup {
     public SimpleChar(Char chr) => this.chr = chr.ch.ToString();
-    public SimpleChar(char chr) => this.chr = chr.ToString();
-
     public override string[] GetExampleMatch(Match matchedSoFar) => new string[]{ chr };
     public override ReCharTypes Add(Char ignore) => 
         throw new Exception("Can't add to simple char");
+
+    public override int MaxExampleOptions() => 1;
 }
 
 public class SquaredBracketsGroup : BasicImplGroup {
@@ -97,6 +98,7 @@ public class SquaredBracketsGroup : BasicImplGroup {
         ipt.AddLast(c);
         return this;
     }
+    public override int MaxExampleOptions() => chrs.Length;
 }
 
 public class CurlyBracketsGroup : BasicImplGroup {
@@ -123,7 +125,7 @@ public class CurlyBracketsGroup : BasicImplGroup {
         range.end = temp.Equals("") ? 20 : int.Parse(temp); //? 20 is just a big number
         return this;
     }
-    public override ReCharTypes SetMany(bool val) => this;
+    public override ReCharTypes SetMany(bool val) => throw new Exception("Can't make {} many");
     public override ReCharTypes SetOptional(bool val) => this;
     public override string[] GetExampleMatch(Match matchedSoFar) =>
         throw new Exception("isn't supposed to match anything");
@@ -138,7 +140,6 @@ public class CurlyBracketsGroup : BasicImplGroup {
     }
 }
 
-
 public class PlaceHolder : BasicImplGroup {
     public PlaceHolderType type {get; init;}
     public TypeOfGroup groupType = TypeOfGroup.Normal;
@@ -151,28 +152,30 @@ public class PlaceHolder : BasicImplGroup {
 
 }
 
-public class BackRefrence : BasicImplGroup {
+public class BackReference : BasicImplGroup {
     private int? number; private string name; //? one or the other
-    public string Name => name;
-    public BackRefrence(int num) => number = num;
-    public BackRefrence(string st) => name = st;
-    public BackRefrence AddDigit(int digit){
+    public bool isNamed = false;
+    public BackReference(int num) {
+        number = num;
+        name = number.ToString();
+    }
+    public BackReference() => isNamed = true;
+    public BackReference AddDigit(int digit){
         number = (int)(number ?? 0) * 10 + digit;
+        name = number.ToString(); 
         return this;
     }
-    public BackRefrence AddLetter(char ch){ 
+    public BackReference AddLetter(char ch){ 
         name += ch;
         return this;
     }
-    public override BackRefrence Add(Char c) => 
+    public override BackReference Add(Char c) => 
         throw new Exception("Can't add to RefrenceToCapturingGroup");
-    public override BackRefrence EndEdit(){
-        name ??= number.ToString(); 
-        return this;
-    }
+
     public override string[] GetExampleMatch(Match matchedSoFar) { 
         return new string[]{ matchedSoFar.groups[name] };
     }
+    public override int MaxExampleOptions() => 1;
 }
 
 public class CircleBracketsGroup : BasicImplGroup {
@@ -222,3 +225,5 @@ public class CircleBracketsGroup : BasicImplGroup {
     }
     public override CircleBracketsGroup Add(Char c) => this;
 }
+
+
