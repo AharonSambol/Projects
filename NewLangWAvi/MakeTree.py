@@ -6,7 +6,7 @@ def make_tree(tokens):
     node = tree = Tree(Token(ParsedTokens.PROGRAM, None), None)
     line_num = 0
     for i, token in enumerate(tokens):
-        print(token)
+        # print(token)
         node, in_list_comp = parse_token(in_list_comp, line_num, node, token)
     return tree
 
@@ -45,7 +45,7 @@ def parse_token(in_list_comp, line_num, node, token):
                 node = add_new(node, token, typ)
             else:
                 node = move_up_tree_while(node, lambda n: n.value.type != typ).parent
-        case Tokens.BRACKETS:
+        case Tokens.PARENTHESES:
             if token.name == '(':
                 node = add_new(node, token, ParsedTokens.PARENTHESES)
             else:
@@ -88,17 +88,23 @@ def parse_token(in_list_comp, line_num, node, token):
             else:
                 typ = [ParsedTokens.LIST, ParsedTokens.INDEX, ParsedTokens.LIST_COMPREHENSION, ParsedTokens.DOT_DOT]
                 node = move_up_tree_while(node, lambda n: n.value.type not in typ).parent
-        case Tokens.BOOL_CONSTANT | Tokens.STR_CONSTANT | Tokens.FLOAT_CONSTANT | Tokens.INT_CONSTANT | \
+        case Tokens.FLOAT_CONSTANT:
+            new_node = Tree(Token(const_to_const[token.type], token.name + 'f'), node)
+            node.children.append(new_node)
+        case Tokens.BOOL_CONSTANT | Tokens.STR_CONSTANT | Tokens.INT_CONSTANT | \
              Tokens.NULL_CONSTANT:
             new_node = Tree(Token(const_to_const[token.type], token.name), node)
             node.children.append(new_node)
         case Tokens.ASSIGNMENT:
             new_node = Tree(Token(ParsedTokens.ASSIGNMENT, token.name), None)
             node = node.parent
-            node = move_up_tree_while(node, lambda n: n.value.type != ParsedTokens.PROGRAM)
+            node = move_up_tree_while(node,
+                                      lambda n: n.value.type not in [
+                                          ParsedTokens.PROGRAM, ParsedTokens.PARENTHESES
+                                      ])
             name = node.children.pop()
             # name.value = Token(ParsedTokens.NAME, name.value.name)
-            if node.value.type != ParsedTokens.PROGRAM:
+            if node.value.type == ParsedTokens.UNKNOWN:
                 node.parent.children.pop()
                 typ = node.value.name
                 node = node.parent
@@ -120,6 +126,8 @@ def parse_token(in_list_comp, line_num, node, token):
             node = move_to_comma_pos(node)
             add_new(node, token, ParsedTokens.COLON)
         case Tokens.DOT:
+            if node.children and node.children[-1].value.type == ParsedTokens.PARENTHESES:
+                node = node.children[-1]
             new_node = Tree(Token(ParsedTokens.DOT, token.name), node.parent)
             new_node.children.append(node)
             node.parent.children[-1] = new_node
@@ -141,8 +149,13 @@ def parse_token(in_list_comp, line_num, node, token):
             elif token.type == Tokens.INDEX:
                 raise Exception("'index' keyword must be in for loop")
             else:
-                return parse_token(in_list_comp, line_num, node, Token(Tokens.BOOL_OPERATOR, 'in'))
-        case Tokens.EXCLAMATION_MARK | Tokens.QUESTION_MARK | Tokens.DOUBLE_QUESTION_MARK | Tokens.REMOVE_NULL:
+                if node.value.type == ParsedTokens.BOOL_NOT:
+                    node.value = Token(ParsedTokens.BOOL_NOT_IN, 'not in')
+                    return node, in_list_comp
+                else:
+                    return parse_token(in_list_comp, line_num, node, Token(Tokens.BOOL_OPERATOR, 'in'))
+        case Tokens.DOLLAR | Tokens.EXCLAMATION_MARK | Tokens.QUESTION_MARK | Tokens.DOUBLE_QUESTION_MARK | \
+                Tokens.REMOVE_NULL:
             if node.value.type in [ParsedTokens.PARENTHESES, ParsedTokens.INDEX] or \
                     token.type == Tokens.REMOVE_NULL:
                 # 3 short try catch on function \ short check bounds
@@ -171,6 +184,7 @@ def parse_token(in_list_comp, line_num, node, token):
                         Tokens.DOUBLE_QUESTION_MARK: ParsedTokens.DOUBLE_QUESTION_MARK,
                         Tokens.QUESTION_MARK: ParsedTokens.QUESTION_MARK,
                         Tokens.EXCLAMATION_MARK: ParsedTokens.EXCLAMATION_MARK,
+                        Tokens.DOLLAR: ParsedTokens.DOLLAR,
                     }[token.type]
 
                     # 2 in order to open '...('
@@ -184,12 +198,21 @@ def parse_token(in_list_comp, line_num, node, token):
             goto.children.append(loop)
             loop.parent = goto
         case Tokens.DOT_DOT:
-            node = move_up_tree_while(node, lambda n: n.value.type != ParsedTokens.LIST)
+            node = move_up_tree_while(node, lambda n: n.value.type not in
+                                                      [ParsedTokens.LIST, ParsedTokens.INDEX])
+            if not node.children:
+                node.children.append(Tree(Token(ParsedTokens.INT, 0), node))
             child = node.children.pop()
             parent = node.parent
-            if len(node.children) == 0:
-                node.parent.children.pop()
+            if len(node.children) == 0:     # 4 what is this??????????
+                print(f"{node.value=} {parent.children[0].value=}")
+                is_lst = node.value.type == ParsedTokens.LIST
+                parent.children.pop()
+            else:
+                raise Exception(f"NOT SURE WHATS HAPPENING HERE... DONT REMEMBER WRITING THIS..?")
             node = add_new(parent, token, ParsedTokens.DOT_DOT)
+            # 3 to differentiate between making list of range and indexing this range
+            node.children.append(Tree(Token(ParsedTokens.UNKNOWN, is_lst), node))
             node.children.append(child)
             child.parent = node
         case Tokens.PIPE:

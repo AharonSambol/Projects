@@ -3,6 +3,7 @@ from enum import Enum, auto
 
 
 class Tokens(Enum):
+    DOLLAR = auto()
     EXCLAMATION_MARK = auto()
     NAND = auto()
     XOR = auto()
@@ -29,7 +30,7 @@ class Tokens(Enum):
     STR_CONSTANT = auto()
     MATH_OPERATOR = auto()
     BOOL_OPERATOR = auto()
-    BRACKETS = auto()
+    PARENTHESES = auto()
     REMOVE_NULL = auto()
     LOOP = auto()
     CONDITION = auto()
@@ -58,6 +59,8 @@ class Tokens(Enum):
 
 
 class ParsedTokens(Enum):
+    BOOL_NOT_IN = auto()
+    DOLLAR = auto()
     EXCLAMATION_MARK = auto()
     BOOL_IN = auto()
     NAND = auto()

@@ -21,13 +21,15 @@ def parser(input_code):
                         {
                             'Enum': (f'{ extension_class }.Enumerate', False),
                             'Zip': (f'{ extension_class }.Zip', False),
-                            'Print': ('Console.WriteLine', False),
+                            'Print': (f'{ extension_class }.Print', False),
+                            'Println': (f'{ extension_class }.Println', False),
                             'Any': (f'{ extension_class }.Any', False),
                             'All': (f'{ extension_class }.All', False),
                             'Bool': (f'{ extension_class }.ToBool', False),
                             'Int': (f'int.Parse("" +', True),
                             'Float': (f'float.Parse("" +', True),
                             'Str': (f'("" +', True),
+                            'END  ': (f"^", False)
 
                         })
 

@@ -50,6 +50,7 @@ symbol_to_token = {
     '>': ParsedTokens.BOOL_L,
     'not': ParsedTokens.BOOL_NOT,
     'in': ParsedTokens.BOOL_IN,
+    'not in': ParsedTokens.BOOL_NOT_IN,
 }
 
 
@@ -78,7 +79,7 @@ def get_precedence(token):
             return 10
         case ParsedTokens.BOOL_NOT:
             return 99
-        case ParsedTokens.BOOL_IN | ParsedTokens.NEGATIVE | ParsedTokens.INDEX | ParsedTokens.DOT | \
+        case ParsedTokens.BOOL_NOT_IN | ParsedTokens.BOOL_IN | ParsedTokens.NEGATIVE | ParsedTokens.INDEX | ParsedTokens.DOT | \
                 ParsedTokens.PLUS_PLUS:
             return 100
         case ParsedTokens.BOOL_EQ | ParsedTokens.BOOL_NEQ:
@@ -195,14 +196,30 @@ extension_methods = [
         func();
         return ref val;
     }""",
-    '''public static bool ToBool(__MyStrWrapper__ val){
+    f'''public static bool ToBool({str_class} val){{
         return !(val == null) && val.ToString() != null && val.ToString() != "";
-    }''',
+    }}''',
     'public static bool ToBool(int val) => val != 0;',
     'public static bool ToBool(float val) => val != 0f;',
     'public static bool ToBool(bool val) => val;',
     'public static bool ToBool<T>(__MyListWrapper__<T> val) => val != null && val.len != 0;',
-    'public static bool ToBool<T>(T val) => !val.Equals(default(T));"',
+    'public static bool ToBool<T>(T val) => !val.Equals(default(T));',
+    """public static void Println(params dynamic[] to_print){
+        Print(to_print);
+        Console.WriteLine();
+    }""",
+    """public static void Print(params dynamic[] to_print){
+        var isFirst = true;
+        foreach(var item in to_print) {
+            if(isFirst){    isFirst = false; } 
+            else {  Console.Write(" "); }
+            Console.Write(item);
+        }
+    }""",
+    """public static T DoAndAssignVal<T>(ref T val, Func<T, T> func){
+        val = func(val);
+        return val;
+    }"""
 ]
 
 
@@ -211,6 +228,17 @@ built_in_classes = [
         public T this[int key] {{
             get => List[key];
             set => List[key] = value;
+        }}
+        public T this[Index key] {{
+            get => List[key];
+            set => List[key] = value;
+        }}
+        public {list_class}<T> this[Range key] {{
+            get {{
+                int start = (key.Start.IsFromEnd)? len - key.Start.Value : key.Start.Value;
+                int end = (key.End.IsFromEnd)? len - key.End.Value : key.End.Value;
+                return new {list_class}<T>(List.GetRange(start, end - start));
+            }}
         }}
         public {list_class}(List<T> lst) {{ List = lst; }}
         public {list_class}() {{ List = new List<T>(); }}
@@ -274,6 +302,17 @@ built_in_classes = [
             List.RemoveAt(i);
             return res;
         }}
+        readonly static Index LAST_INDEX = new Index(1, true);
+        public T Pop(Index? i=null){{
+            Index idx = (i is null)? LAST_INDEX: (Index)i;
+            var res = List[idx];
+            if(idx.IsFromEnd){{
+                List.RemoveAt(len - idx.Value);
+            }} else {{
+                List.RemoveAt(idx.Value);
+            }}
+            return res;
+        }}
         public void Insert(int pos, T item) => List.Insert(pos, item);
         public {list_class}<T> Copy(){{
             var newList = new List<T>();
@@ -296,9 +335,34 @@ built_in_classes = [
             return res.ToString();
         }}
         public override string ToString() => "[" + Join(", ") + "]";
+        
+        public {list_class}<Res> Cast<Res>() {{
+            if(len == 0){{   return new {list_class}<Res>(); }}
+            if(typeof(Res) == typeof(float)){{
+                return new {list_class}<Res>(
+                    List.Select((x) => (Res)Convert.ChangeType(float.Parse(x.ToString()), typeof(Res))).ToList()
+                );
+            }}
+            if(typeof(Res) == typeof(int)){{
+                return new {list_class}<Res>(
+                    List.Select((x) => (Res)Convert.ChangeType(int.Parse(x.ToString()), typeof(Res))).ToList()
+                );
+            }}
+            if(typeof(Res) == typeof({str_class})){{
+                return new {list_class}<Res>(
+                    List.Select((x) => (Res)Convert.ChangeType(new {str_class}(x.ToString()), typeof(Res))).ToList()
+                );
+            }}
+            if(typeof(Res) == typeof(bool)){{
+                return new {list_class}<Res>(
+                    List.Select((x) => (Res)Convert.ChangeType({extension_class}.ToBool(x.ToString()), typeof(Res))).ToList()
+                );
+            }}
+            return new {list_class}<Res>(List.Cast<Res>().ToList());
+        }}
     }}""",
 
-    f"""public class {str_class}{{  // todo remove
+    f"""public class {str_class}{{  // todo Remove() 
     public {str_class} this[int key]{{
         get{{
             if (key < 0 || key >= InternalStr.Length){{

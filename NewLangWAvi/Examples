@@ -104,5 +104,71 @@ string formatDuration(int seconds){
 }
 
 
+Obj Node {
+    vars {
+        Node Left
+        Node Right
+        int Value
+    }
+    ~(Node @Left, @Right, int @Value){}
+}
+Obj Kata{
+    staticFuncs{
+        List<int> TreeByLevels(Node node){
+            if node == null {
+                return [int:].ToList()
+            }
+            queue = [Node[]: [Node: node]]
+            res = [int:]
+            loop {
+                layer = queue.Pop()
+                if layer == [Node:]{
+                    return res.ToList()
+                }
+                queue.Add([Node:])
+                new_arr = [int:]
+                for n in layer{
+                    new_arr.Add(n.Value)
+                    if n.Left != null{
+                        queue[0].Add(n.Left)
+                    }if n.Right != null{
+                        queue[0].Add(n.Right)
+                    }
+                }
+                res.Extend(new_arr)
+            }
+        }
+    }
+}
+
+
+Struct Node {
+    vars {
+        int value
+        int distance
+	}
+}
+
+Obj PyramidSlideDown {
+    staticFuncs {
+        int LongestSlideDown(int[][] pyramid){
+            nodes = ToNodes(pyramid)
+            for r, row in Enum(nodes) {
+                for c, node in Enum(row){
+                    if r == 0{
+                        nodes[0][0].distance = 0
+                        continue
+                    }
+                    min_val = 0
+                    print(row[?c+1])
+
+                }
+            }
+        }
+        Node[][] ToNodes(int[][] pyramid){
+            return [Node[]: [Node: new Node(x, -1) for x in row] for row in pyramid]
+        }
+    }
+}
 
 

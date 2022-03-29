@@ -1,11 +1,52 @@
 from Parser import parser
 
-# 5 new DataStructure<int>(){1,2,3,4,5,6}
 # 3 enumerate(zip())
+# 5 x = row[7+1]
+# 5 x = row[?-1]
 
 parser("""
-print(4+5.1)
+Struct Node {
+    vars {
+        int value
+        int distance
+	}
+	~(int @value, @distance){}
+}
+Obj PyramidSlideDown {
+    staticFuncs {
+        int LongestSlideDown(int[][] pyramid){
+            res = 0
+            nodes = ToNodes(pyramid)
+            for r, row in nodes {
+                for c, node in row{
+                    if r == c and c == 0{
+                        nodes[0][0].distance = 0
+                        continue
+                    }
+                    max_val = 0
+                    if nodes[r].HasIndex( nodes[r][?1] > max_val {
+                        max_val = nodes[r][1]
+                    }
+                    if nodes[r][?1] > max_val {
+                        max_val = nodes[r][1]
+                    }
+                    node.distance = max_val
+                    if max_val + node.value > res {
+                        res = max_val + node.value
+                    }
+                }
+            }
+            return res
+        }
+        Node[][] ToNodes(int[][] pyramid){
+            [Node[]: [Node: new Node(x, -1) for x in row] for row in pyramid]
+        }
+    }
+}
+
+
 """)
+
 
 # parser([
 # Token(Tokens.BRACKETS, '('), Token(Tokens.INT_CONSTANT, 5), Token(Tokens.BOOL_OPERATOR, '+'),

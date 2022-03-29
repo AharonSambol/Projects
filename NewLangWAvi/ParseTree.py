@@ -4,6 +4,7 @@ import re
 
 def eval_tree(node, in_list_comprehension=False):
     global extension_class
+    # print(node.value)
     if node.children:
         res = close_function(node)
         if res:
@@ -18,7 +19,7 @@ def eval_tree(node, in_list_comprehension=False):
                 if n.value.type == ParsedTokens.NEW_LINE:
                     continue
                 n.value = f"{eval_tree(n)}"
-                if n.value and not n.value.endswith('}'):
+                if n.value and not n.value.endswith('}') and not n.value.endswith(';'):
                     n.value += ';'
                 res += n.value + '\n'
             return f"{{\n{res}\n}}"
@@ -35,6 +36,8 @@ def eval_tree(node, in_list_comprehension=False):
             return f"!({eval_tree(node.children[0])} && {eval_tree(node.children[1])})"
         case ParsedTokens.BOOL_IN:
             return f"{eval_tree(node.children[1])}.Contains({eval_tree(node.children[0])})"
+        case ParsedTokens.BOOL_NOT_IN:
+            return f"!{eval_tree(node.children[1])}.Contains({eval_tree(node.children[0])})"
         case ParsedTokens.CEILING_DIVISION:
             return f"((int)Math.Ceiling((double){eval_tree(node.children[0])}/(double){eval_tree(node.children[1])}))"
         case ParsedTokens.FLOOR_DIVISION:
@@ -43,7 +46,7 @@ def eval_tree(node, in_list_comprehension=False):
             typ = res = ""
             is_len = False
             for i, child in enumerate(node.children):
-                if child.value.type == ParsedTokens.COLON:
+                if node.value.type == ParsedTokens.LIST and child.value.type == ParsedTokens.COLON:
                     if typ:
                         if res[:-len(', ')] == 'len':
                             is_len = True
@@ -102,6 +105,7 @@ def eval_tree(node, in_list_comprehension=False):
                     return f"{var_name} {node.value.name} {eval_tree(node.children[1])}"
                 program.declared_vars.append(var_name)
                 return f"var {var_name} {node.value.name} {eval_tree(node.children[1])}"
+            # print(f"{node.parent.value=}, {node.value}")
             return f"{eval_tree(node.children[0])} {node.value.name} {eval_tree(node.children[1])}"
         case ParsedTokens.CONDITION_STATEMENT:
             if len(node.children) == 1:
@@ -125,6 +129,9 @@ def eval_tree(node, in_list_comprehension=False):
                 name = 'else if'
             if name == 'else':
                 return f"else {eval_tree(block)}"
+            if name == 'case':
+                block.children.append(Tree(Token(ParsedTokens.CONTROL_MODIFIER, 'break'), block))
+                return f"{name} {eval_tree(cond)}:\n{eval_tree(block)[1:-1].strip()}"
             return f"{name} ({eval_tree(cond)}) {eval_tree(block)}"
         case ParsedTokens.FOR_LOOP:
             assign_vars = node.children.pop(0).value.name
@@ -181,22 +188,32 @@ def eval_tree(node, in_list_comprehension=False):
             # 3 flatten input variables:
             is_extension = False
             prev_type = ""
-            for n in node.children[0].children:
-                if n.children:
-                    this_type = prev_type = n.value.name if n.value.name != 'str' else str_class
-                    next_child = n.children.pop(0)
-                    # if next_child.value.name == '@':
-                    #     n.value = Token(n.value.type, this_type + ' @' + next_child.children[0].value.name)
-                    #     continue
-                    if next_child.children:
-                        is_extension = True
-                        prev_type = next_child.value.name
-                        this_type = 'this ' + prev_type
-                        next_child = next_child.children[0]
-                    n.value = Token(n.value.type, this_type + ' ' + next_child.value.name)
-                else:
-                    n.value = Token(n.value.type, prev_type + ' ' + n.value.name)
 
+            ipt_param = node.children[0]
+            for n in ipt_param.children:
+                parts = []
+                if n.value.type == ParsedTokens.ASSIGNMENT:
+                    parts.append(n.children.pop(0))
+                    while parts[-1].children:
+                        parts.append(parts[-1].children[0])
+                parts.append(n)
+                while parts[-1].children:
+                    parts.append(parts[-1].children[0])
+                # print([x.value.name for x in parts])
+                start = default = ""
+                if parts[0].value.name in ['extend', 'out', 'ref']:
+                    start = {'extend': 'this', 'out': 'out', 'ref': 'ref'}[parts[0].value.name] + ' '
+                    parts.pop(0)
+                if len(parts) > 1 and parts[-2].value.name == '=':
+                    parts.pop(-2)
+                    default = f"={parts.pop().value.name}"
+                if len(parts) == 2:
+                    prev_type = parts[0].value.name if parts[0].value.name != 'str' else str_class
+                    name = parts[1].value.name
+                else:
+                    name = parts[0].value.name
+                n.value = Token(ParsedTokens.UNKNOWN, f"{ start }{prev_type} {name}{default}")
+                n.children = []
             passed_vars = eval_tree(node.children[0])
             all_names = list(re.findall(r'\w+(?=\s*[,=)])', passed_vars))
             node.children[1].declared_vars.extend(all_names)
@@ -242,11 +259,17 @@ def eval_tree(node, in_list_comprehension=False):
                 return f"new {list_class}<{typ}>(({eval_tree(node.children[1], in_list_comprehension=True)} " \
                        f"where {condition} " \
                        f"select {eval_tree(node.children[0], in_list_comprehension=True)}).ToList())"
-
         case ParsedTokens.DOT_DOT:
-            return f"new {list_class}<int>(" \
-                   f"Enumerable.Range({eval_tree(node.children[0])}, {eval_tree(node.children[1])})" \
-                   f".ToList())"
+            is_lst = node.children.pop(0).value.name
+            if is_lst:
+                return f"new {list_class}<int>(" \
+                       f"Enumerable.Range({eval_tree(node.children[0])}, {eval_tree(node.children[1])})" \
+                       f".ToList())"
+            else:
+                if len(node.children) == 1:
+                    return f"[{ eval_tree(node.children[0]) }..]"
+                return f"[{ eval_tree(node.children[0]) }..{eval_tree(node.children[1])}]"
+
         case ParsedTokens.UNKNOWN | ParsedTokens.CONST:
             res = node.value.name
             for c in node.children:
@@ -358,18 +381,23 @@ def eval_tree(node, in_list_comprehension=False):
                     node.value = Token(ParsedTokens.FUNCTION, f'public { name_no_generic }')
                     # 3 deal with the "@"s
                     to_add = []
-                    for child in node.children[0].children:
-                        if child.children and child.children[0].value.name == '@':
-                            child.children[0] = child.children[0].children[0]
-                            name = child.children[0].value.name
-                            to_add.append(
-                                Tree(
-                                    Token(
-                                        ParsedTokens.UNKNOWN,
-                                        f'this.{name} = {name}'
-                                    ), node.children[1]
+                    for i, child in enumerate(node.children[0].children):
+                        parent = node.children[0]
+                        while child.children:
+                            if child.value.name == '@':
+                                parent.children[i] = child.children[0]
+                                name = parent.children[i].value.name
+                                to_add.append(
+                                    Tree(
+                                        Token(
+                                            ParsedTokens.UNKNOWN,
+                                            f'this.{name} = {name}'
+                                        ), node.children[1]
+                                    )
                                 )
-                            )
+                            parent = child
+                            child = child.children[0]
+                            i = 0
                     node_body = node.children[1]
                     node_body.children = to_add + node_body.children
                     return eval_tree(node).removeprefix('public void ')
@@ -454,6 +482,9 @@ def insert_function(node):
             return f"{extension_class}.ShortTryFunctionNull(()=>{eval_tree(node)}"
         case ParsedTokens.EXCLAMATION_MARK:
             return f"{extension_class}.DoVoidAndReturn(ref {eval_tree(node.children[-2])}, ()=>{eval_tree(node)}"
+        case ParsedTokens.DOLLAR:
+            ref = eval_tree(node.children[-2])
+            return f"{extension_class}.DoAndAssignVal(ref {ref}, ({ref})=>{eval_tree(node)}"
     node.children.insert(0, child)
     return False
 

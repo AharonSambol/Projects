@@ -60,8 +60,7 @@ def tokenize(input_code):
             if not prev:
                 cur_token = c
             else:
-                if cur_token == '#' or bool(is_num_dig.match(c)) == bool(is_num_dig.match(prev)) or \
-                        (cur_token.isnumeric() and c == '.') or (re.fullmatch(r'\d+\.', cur_token) and c.isdigit()):
+                if cur_token == '#' or bool(is_num_dig.match(c)) == bool(is_num_dig.match(prev)):
                     cur_token += c
                 else:
                     eat_token(cur_token, res, bracket_types)
@@ -177,7 +176,6 @@ single_option_tokens = {
     'null': Tokens.NULL_CONSTANT,
     '-?': Tokens.REMOVE_NULL,
     'for': Tokens.LOOP,
-    'in': Tokens.IN,
     'index': Tokens.INDEX_KEYWORD,
     ',': Tokens.COMMA,
     '.': Tokens.DOT,
@@ -187,23 +185,27 @@ single_option_tokens = {
     '=??': Tokens.SHORT_SHORT_NULL_IF,
     '?': Tokens.QUESTION_MARK,
     ':': Tokens.COLON,
-    'switch': Tokens.SWITCH,
-    '->': Tokens.CASE,
-    '<-': Tokens.SWITCH_RETURN,
+    # 'switch': Tokens.SWITCH,
+    # '->': Tokens.CASE,
+    # '<-': Tokens.SWITCH_RETURN,
     'override': Tokens.OVERRIDE,
     'const': Tokens.CONST,  # 3 maybe dont need?
     'raise': Tokens.THROW,
     '|': Tokens.PIPE,
+    '~': Tokens.CLASS_PARTS,
+    '!': Tokens.EXCLAMATION_MARK,
+    '$': Tokens.DOLLAR,
 }
 
 
 def determine_token(st, res, bracket_types):
     if tok := single_option_tokens.get(st, False):
         return Token(tok, st)
-    if st == '~':
-        return Token(Tokens.CLASS_PARTS, st)
-    if st == '!':
-        return Token(Tokens.EXCLAMATION_MARK, st)
+    if st == 'in':
+        if res and res[-1].name == 'not':
+            res.pop()
+            return Token(Tokens.BOOL_OPERATOR, 'not in')
+        return Token(Tokens.IN, 'in')
     if st in ['true', 'false']:
         return Token(Tokens.BOOL_CONSTANT, st)
     if st in ['++', '--']:
@@ -213,10 +215,10 @@ def determine_token(st, res, bracket_types):
     if st in ['==', '!=', '>=', '>', '<=', '<', 'not', 'and', 'or', 'xor', 'nand']:
         return Token(Tokens.BOOL_OPERATOR, st)
     if st in ['(', ')']:
-        return Token(Tokens.BRACKETS, st)
+        return Token(Tokens.PARENTHESES, st)
     if st in ['{', '}']:
         return Token(Tokens.BRACES, st)
-    if st in ['if', 'else', 'until', 'while', 'unless', 'elif', 'loop']:
+    if st in ['if', 'else', 'until', 'while', 'unless', 'elif', 'loop', 'switch', 'case']:
         return Token(Tokens.CONDITION, st)
     if st in ['break', 'continue', 'rewind', 'restart', 'return']:
         return Token(Tokens.CONTROL_MODIFIER, st)
@@ -237,7 +239,7 @@ def determine_token(st, res, bracket_types):
         if res:
             prev = res[-1]
             if (prev.type == Tokens.OTHER or
-                    (prev.type == Tokens.BRACKETS and prev.name == ')') or
+                    (prev.type == Tokens.PARENTHESES and prev.name == ')') or
                     prev.type == Tokens.INDEX):
                 bracket_types.append(Tokens.INDEX)
                 return Token(Tokens.INDEX, '[')
@@ -259,6 +261,12 @@ def determine_token(st, res, bracket_types):
     if re.fullmatch(r'(\+|-|\*|\\|\\{2}|%|\^)?=', st):
         return Token(Tokens.ASSIGNMENT, st)
     if re.fullmatch(r'\d+', st):
+        if len(res) > 1:
+            if res[-1].type == Tokens.DOT and res[-2].type == Tokens.INT_CONSTANT:
+                st = f'{ res[-2].name }.{ st }'
+                res.pop()
+                res.pop()
+                return Token(Tokens.FLOAT_CONSTANT, st)
         return Token(Tokens.INT_CONSTANT, st)
     if re.fullmatch(r'\d+\.\d+', st):
         return Token(Tokens.FLOAT_CONSTANT, st)
