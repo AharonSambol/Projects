@@ -80,7 +80,6 @@ fn count_row(board: &[[&Piece;7];6], row: usize, col: usize, cur_color: &Piece) 
             consecutive += 1
         } else {    break; }    
     }
-    println!("row {}", consecutive);
     consecutive
 }
 
@@ -96,7 +95,6 @@ fn count_col(board: &[[&Piece;7];6], row: usize, col: usize, cur_color: &Piece) 
             consecutive += 1
         } else {    break; }    
     }
-    println!("col {}", consecutive);
     consecutive
 }
 
@@ -122,7 +120,6 @@ fn count_diagonal_u(board: &[[&Piece;7];6], row: usize, col: usize, cur_color: &
         r -= 1;
         c -= 1;
     }
-    println!("u {}", consecutive);
     consecutive
 }
 
@@ -148,7 +145,6 @@ fn count_diagonal_d(board: &[[&Piece;7];6], row: usize, col: usize, cur_color: &
         r -= 1;
         c += 1;
     }
-    println!("d {}", consecutive);
     consecutive
 }
 
