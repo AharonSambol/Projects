@@ -1,7 +1,7 @@
 use std::io;
 
 fn main() {
-    let mut board: [[char; 3]; 3] = [['-'; 3], ['-'; 3], ['-'; 3]];
+    let mut board = [['-'; 3]; 3];
     let mut turn = 'x';
     loop {
         let pos = loop {
