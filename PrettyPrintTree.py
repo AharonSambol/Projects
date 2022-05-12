@@ -3,6 +3,11 @@ from colorama import Back, Style
 
 class Print:
     def __init__(self, get_children):
+        # this is a lambda which returns a list of all the children
+        # in order to support trees of different kinds eg:
+        #   self.child_right, self.child_left... or
+        #   self.children = []... or
+        #   self.children = {}... or anything else
         self.get_children = get_children
 
     def __call__(self, node):
