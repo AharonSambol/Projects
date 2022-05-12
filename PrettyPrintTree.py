@@ -2,6 +2,13 @@ import re
 from colorama import Back, Style
 
 
+def format_box(spacing, val):
+    for r, row in enumerate(val):
+        val[r] = [f'|{spacing}{row[0]}{spacing}|']
+    top, bottom = [['_' * len(val[0][0])]], [['-' * len(val[0][0])]]
+    return top + val + bottom
+
+
 class Print:
     def __init__(self, get_children, get_val, show_newline_literal=False, return_instead_of_print=False):
         # this is a lambda which returns a list of all the children
@@ -18,7 +25,8 @@ class Print:
     def __call__(self, node):
         res = self.tree_to_str(node)
         gray = lambda x: Back.LIGHTBLACK_EX + x + Style.RESET_ALL
-        lines = ["".join(gray(x) if x.startswith('[') else x for x in line) for line in res]
+        is_node = lambda x: x.strip() not in ['|', '\\', '']
+        lines = ["".join(gray(x) if is_node(x) else x for x in line) for line in res]
         if self.dont_print:
             return "\n".join(lines)
         print("\n".join(lines))
@@ -36,8 +44,7 @@ class Print:
 
         lst_val = st_val.split("\n")
         longest = max(len(x) for x in lst_val)
-        top, bottom = ['_' * (longest + 4)], ['-' * (longest + 4)]
-        return top + [f'| {x}{" " * (longest - len(x))} |' for x in lst_val] + bottom
+        return [[f'{x}{" " * (longest - len(x))}'] for x in lst_val]
 
     def tree_to_str(self, node):
         val = self.get_val(node)
@@ -45,7 +52,7 @@ class Print:
         if len(self.get_children(node)) == 0:
             if len(val) == 1:
                 return [['[ ' + val[0][0] + ' ]']]
-            return val
+            return format_box("", val)
 
         to_print = [[]]
         len_row_1 = spacing = 0
@@ -65,33 +72,33 @@ class Print:
         spacing = spacing * ' '
         if len(val) == 1:
             val = [[f'[{ spacing }{val[0][0]}{ spacing }]']]
-        to_print = val + to_print
-        return to_print
-
+        else:
+            val = format_box(spacing, val)
+        return val + to_print
 
 # ---------- example: ----------
 # class Tree:
 #     def __init__(self, val):
 #         self.val = val
 #         self.children = []
-# 
+#
 #     def add_child(self, child):
 #         self.children.append(child)
 #         return child
-# 
-# 
+#
+#
 # class Person:
 #     def __init__(self, age, name):
 #         self.age = age
 #         self.name = name
-# 
+#
 #     def __str__(self):
-#         return f"""Person {{ 
-#     age: {self.age}, 
-#     name: {self.name} 
+#         return f"""Person {{
+#     age: {self.age},
+#     name: {self.name}
 # }}"""
-# 
-# 
+#
+#
 # tree = Tree(0)
 # r = tree.add_child(Tree([1, 2, 3]))
 # l = tree.add_child(Tree({1: "qo", 24: " 5326"}))
