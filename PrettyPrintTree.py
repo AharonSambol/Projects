@@ -4,13 +4,17 @@ from colorama import Back, Style
 
 def format_box(spacing, val):
     for r, row in enumerate(val):
-        val[r] = [f'|{spacing}{row[0]}{spacing}|']
-    top, bottom = [['_' * len(val[0][0])]], [['-' * len(val[0][0])]]
-    return top + val + bottom
+        val[r] = [spacing, f'[{row[0]}]']
+    return val
 
 
 class Print:
-    def __init__(self, get_children, get_val, show_newline_literal=False, return_instead_of_print=False):
+    def __init__(self, get_children, get_val,
+                 show_newline_literal=False,
+                 return_instead_of_print=False,
+                 trim=False,
+                 start_message=None
+                 ):
         # this is a lambda which returns a list of all the children
         # in order to support trees of different kinds eg:
         #   self.child_right, self.child_left... or
@@ -18,60 +22,76 @@ class Print:
         #   self.children = {}... or anything else
         self.get_children = get_children
         self.get_node_val = get_val
+        # only display first x chars
+        self.trim = trim
         # if true will display \n as \n and not as new lines
         self.show_newline = show_newline_literal
         self.dont_print = return_instead_of_print
+        self.start_message = start_message
 
     def __call__(self, node):
+        if self.start_message is not None and not self.dont_print:
+            print(self.start_message(node))
         res = self.tree_to_str(node)
-        gray = lambda x: Back.LIGHTBLACK_EX + x + Style.RESET_ALL
-        is_node = lambda x: x.strip() not in ['|', '\\', '']
+        gray = lambda x: " " * (len(x) - len(x.lstrip())) + \
+                         Back.LIGHTBLACK_EX + " " + x.lstrip()[1:-1] + " " + Style.RESET_ALL
+        is_node = lambda x: x.startswith('[')
         lines = ["".join(gray(x) if is_node(x) else x for x in line) for line in res]
         if self.dont_print:
+            if self.start_message:
+                return self.start_message(node) + "\n" + "\n".join(lines)
             return "\n".join(lines)
         print("\n".join(lines))
 
     def get_val(self, node):
         st_val = str(self.get_node_val(node))
-
+        if self.trim and len(st_val) > self.trim:
+            st_val = st_val[:self.trim] + "..."
         if self.show_newline:
-            def escape_enter(match):
-                return '\\n' if match.group(0) == '\n' else '\\\\n'
-            st_val = re.sub(r'(\n|\\n)', escape_enter, st_val)
-
+            escape_newline = lambda match: '\\n' if match.group(0) == '\n' else '\\\\n'
+            st_val = re.sub(r'(\n|\\n)', escape_newline, st_val)
         if '\n' not in st_val:
             return [[st_val]]
-
         lst_val = st_val.split("\n")
         longest = max(len(x) for x in lst_val)
         return [[f'{x}{" " * (longest - len(x))}'] for x in lst_val]
 
     def tree_to_str(self, node):
         val = self.get_val(node)
-
         if len(self.get_children(node)) == 0:
             if len(val) == 1:
-                return [['[ ' + val[0][0] + ' ]']]
+                return [['[' + val[0][0] + ']']]
             return format_box("", val)
-
         to_print = [[]]
-        len_row_1 = spacing = 0
+        spacing = 0
         for child in self.get_children(node):
-            to_print[0].append(' ' * (spacing - len_row_1) + '\\')
-            len_row_1 = spacing + 1
             child_print = self.tree_to_str(child)
             for l, line in enumerate(child_print):
                 if l + 1 >= len(to_print):
                     to_print.append([])
+                if l == 0:
+                    len_line = len("".join(line))
+                    middle_of_child = len_line - sum(divmod(len(line[-1]), 2))
+                    len_to_print_0 = len("".join(to_print[0]))
+                    to_print[0].append((spacing - len_to_print_0 + middle_of_child) * " " + '┬')
                 to_print[l + 1].append(' ' * (spacing - len("".join(to_print[l + 1]))))
                 to_print[l + 1].extend(line)
             spacing = max(len("".join(x)) for x in to_print) + 1
 
-        to_print[0][0] = '|'
-        spacing = (len_row_1 - len(val[0][0])) // 2
-        spacing = spacing * ' '
+        if len(to_print[0]) != 1:
+            new_lines = "".join(to_print[0])
+            space_before = len(new_lines) - len(new_lines := new_lines.strip())
+            new_lines = " " * space_before + '┌' + new_lines[1:-1].replace(' ', '─') + '┐'
+            pipe_pos = middle = len(new_lines) - sum(divmod(len(new_lines.strip()), 2))
+            new_ch = {'─': '┴', '┬': '┼', '┌': '├', '┐': '┤'}[new_lines[middle]]
+            new_lines = new_lines[:middle] + new_ch + new_lines[middle + 1:]
+            to_print[0] = [new_lines]
+        else:
+            to_print[0][0] = to_print[0][0][:-1] + '│'
+            pipe_pos = len(to_print[0][0]) - 1
+        spacing = " " * (pipe_pos - sum(divmod(len(val[0][0]), 2)))
         if len(val) == 1:
-            val = [[f'[{ spacing }{val[0][0]}{ spacing }]']]
+            val = [[spacing, f'[{val[0][0]}]']]
         else:
             val = format_box(spacing, val)
         return val + to_print
