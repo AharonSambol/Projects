@@ -81,7 +81,7 @@ public class Chess extends JFrame {
             var piece = game.findPiece(turn);
             var dests = piece.getPossibleDestinations(board);
             var randomDest = dests.get(game.rand.nextInt(dests.size()));
-            piece.move(randomDest);
+            piece.move(randomDest, board);
             turn = turn.equals(Color.black) ? Color.white : Color.black;
             TimeUnit.SECONDS.sleep(1);
         }
